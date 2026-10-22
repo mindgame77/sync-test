@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>89 A/V sync test</title>
+<style>
+html,body{margin:0;height:100%;background:#000;color:#fff;font:600 20px -apple-system,system-ui,sans-serif;overflow:hidden}
+#flash{position:fixed;inset:0;background:#fff;display:none}
+#ui{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:20px}
+button{font:inherit;font-size:22px;padding:16px 26px;border-radius:14px;border:0;background:#ffc933;color:#000;width:80%}
+#big{font-size:110px;line-height:1}#st{font-size:16px;opacity:.8}
+</style></head><body>
+<div id="ui"><div>89 sync test</div>
+<button id="beep">Beep + flash (60 s)</button>
+<button id="clap">Clap on flash (60 s)</button>
+<div id="big"></div><div id="st">Start recording first, then tap a button.</div></div>
+<div id="flash"></div>
+<script>
+const N=30, GAP=2, FL=0.10; // 30 events, every 2 s, 100 ms white
+const $=id=>document.getElementById(id), flash=$('flash'), big=$('big'), st=$('st');
+let ctx=null, busy=false;
+function run(mode){
+  if(busy) return; busy=true;
+  ctx=ctx||new (window.AudioContext||window.webkitAudioContext)(); ctx.resume();
+  document.querySelectorAll('button').forEach(b=>b.style.display='none');
+  const lat=(ctx.outputLatency||0)+(ctx.baseLatency||0);
+  const t0=ctx.currentTime+3, times=[];
+  for(let i=0;i<N;i++){
+    const t=t0+i*GAP; times.push(t);
+    if(mode==='beep'){ // 1 kHz, 60 ms, sharp attack
+      const o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.value=1000;
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.9,t+0.002); g.gain.setValueAtTime(0.9,t+0.058); g.gain.linearRampToValueAtTime(0,t+0.06);
+      o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+0.07);
+    }
+  }
+  st.textContent=mode==='beep'?'Stay quiet. Watch the flashes.':'Clap exactly when the screen turns white.';
+  let i=0, on=false;
+  (function tick(){
+    // Visual follows the audio clock; compensate the output latency so light and sound leave together.
+    const now=ctx.currentTime-lat;
+    if(i<N){
+      const t=times[i], left=t-now;
+      if(!on && left<=0){ flash.style.display='block'; on=true; }
+      if(on && now>=t+FL){ flash.style.display='none'; on=false; i++; }
+      if(!on){ const k=Math.ceil(left); big.textContent= mode==='clap' ? (left<1.2?'CLAP':k) : (i+1)+'/'+N; }
+      requestAnimationFrame(tick);
+    } else { big.textContent='Done'; st.textContent='Stop recording and post.'; }
+  })();
+}
+$('beep').onclick=()=>run('beep'); $('clap').onclick=()=>run('clap');
+</script></body></html>
